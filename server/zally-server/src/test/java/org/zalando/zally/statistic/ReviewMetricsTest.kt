@@ -15,7 +15,6 @@ import org.zalando.zally.apireview.ApiReview
 import org.zalando.zally.apireview.ApiReviewRepository
 import org.zalando.zally.core.Result
 import org.zalando.zally.rule.api.Severity
-import org.zalando.zally.statistic.ReviewMetrics.Companion.MUST_VIOLATIONS
 import org.zalando.zally.util.readApiDefinition
 import java.net.URI
 
@@ -52,10 +51,8 @@ class ReviewMetricsTest {
 
         assertThat(reviewMetrics.statisticsReferences.size).isEqualTo(givenListOfStatistics.size)
         reviewMetrics.statisticsReferences.forEach { reference ->
-            reference.entries.forEach {
-                it.value.values.forEach { statisticValue ->
-                    assertThat(statisticValue.get()).isEqualTo(0L)
-                }
+            reference.metricPair.forEach {
+                assertThat(it.metricValue.get()).isEqualTo(0L)
             }
         }
     }
@@ -82,8 +79,8 @@ class ReviewMetricsTest {
 
         reviewMetrics.updateMetrics()
 
-        val actual = reviewMetrics.statisticsReferences[0].getValue(givenApiReview.name!!)
-        assertThat(actual.getValue(MUST_VIOLATIONS)).hasValue(1L)
+        val actual = reviewMetrics.statisticsReferences[0].metricPair.first { it.metricName == MetricName.MUST_VIOLATIONS }
+        assertThat(actual.metricValue).hasValue(1L)
 
         // now we return a new result without violations for the same API and verify the reference is updated
         val givenNewApiReview = ApiReview(
@@ -95,6 +92,6 @@ class ReviewMetricsTest {
 
         reviewMetrics.updateMetrics()
 
-        assertThat(actual.getValue(MUST_VIOLATIONS)).hasValue(0L)
+        assertThat(actual.metricValue).hasValue(0L)
     }
 }

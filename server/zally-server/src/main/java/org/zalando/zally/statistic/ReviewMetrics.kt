@@ -7,12 +7,11 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.zalando.zally.apireview.ApiReviewRepository
-import java.util.concurrent.atomic.AtomicLong
 
 @Component
 class ReviewMetrics(private val apiReviewRepository: ApiReviewRepository, private val meterRegistry: MeterRegistry) {
 
-    final val statisticsReferences = mutableListOf<Map<String, Map<String, AtomicLong>>>()
+    final val statisticsReferences = mutableListOf<StatisticReference>()
 
     @Value("\${metrics.review.name-prefix:zally_}")
     lateinit var metricsNamePrefix: String
@@ -21,61 +20,39 @@ class ReviewMetrics(private val apiReviewRepository: ApiReviewRepository, privat
     fun updateMetrics() {
         LOG.debug("Updating metrics for review statistics")
         apiReviewRepository.findLatestApiReviews()
-            .map(ReviewStatisticsByName.Companion::of)
+            .map(ReviewStatisticsByName.Factory::of)
             .forEach { statistic ->
                 statisticsReferences
-                    .filter { it.containsKey(statistic.name) }
-                    .map { it[statistic.name] }
-                    .map {
+                    .filter { it.statisticName == statistic.name }
+                    .map { reference ->
                         LOG.debug("Updating metrics reference values for review statistic ${statistic.name}")
-                        it?.get(NUMBER_OF_ENDPOINTS)?.set(statistic.numberOfEndpoints)
-                        it?.get(MUST_VIOLATIONS)?.set(statistic.mustViolations)
-                        it?.get(SHOULD_VIOLATIONS)?.set(statistic.shouldViolations)
-                        it?.get(MAY_VIOLATIONS)?.set(statistic.mayViolations)
-                        it?.get(HINT_VIOLATIONS)?.set(statistic.hintViolations)
+                        reference.metricValueFor(MetricName.NUMBER_OF_ENDPOINTS).set(statistic.numberOfEndpoints)
+                        reference.metricValueFor(MetricName.MUST_VIOLATIONS).set(statistic.mustViolations)
+                        reference.metricValueFor(MetricName.SHOULD_VIOLATIONS).set(statistic.shouldViolations)
+                        reference.metricValueFor(MetricName.MAY_VIOLATIONS).set(statistic.mayViolations)
+                        reference.metricValueFor(MetricName.HINT_VIOLATIONS).set(statistic.hintViolations)
                     }
                     .ifEmpty {
                         LOG.debug("Creating new metrics reference for review statistic ${statistic.name}")
-                        val statisticMap = createReferenceMapForStatistic(statistic)
-                        statisticsReferences.add(statisticMap)
-                        registerGaugeMetric(statisticMap)
+                        val reference = StatisticReference.of(statistic)
+                        statisticsReferences.add(reference)
+                        registerGaugeMetric(reference, statistic.customLabels)
                     }
             }
     }
 
-    private fun createReferenceMapForStatistic(statistic: ReviewStatisticsByName): Map<String, Map<String, AtomicLong>> {
-        return mapOf(Pair(
-            statistic.name,
-            mapOf(
-                Pair(NUMBER_OF_ENDPOINTS, AtomicLong(statistic.numberOfEndpoints)),
-                Pair(MUST_VIOLATIONS, AtomicLong(statistic.mustViolations)),
-                Pair(SHOULD_VIOLATIONS, AtomicLong(statistic.shouldViolations)),
-                Pair(MAY_VIOLATIONS, AtomicLong(statistic.mayViolations)),
-                Pair(HINT_VIOLATIONS, AtomicLong(statistic.hintViolations))
-            )
-        ))
-    }
-
-    private fun registerGaugeMetric(statisticReference: Map<String, Map<String, AtomicLong>>) {
-        statisticReference.entries.forEach { entry ->
-            entry.value.forEach { metric ->
-                val snakeCasedApiName = entry.key.replace(Regex("\\p{Zs}+"), "_").toLowerCase()
-                val metricName = "${metricsNamePrefix}${metric.key}"
-                Gauge
-                    .builder(metricName, metric.value, { v -> v.toDouble() })
-                    .tag("api_name", snakeCasedApiName)
-                    .register(meterRegistry)
-                LOG.debug("Registered micrometer gauge $metricName for api $snakeCasedApiName")
-            }
+    private fun registerGaugeMetric(reference: StatisticReference, customLabels: Map<String, String>) {
+        val snakeCasedApiName = reference.statisticName.replace(Regex("\\p{Zs}+"), "_").toLowerCase()
+        reference.metricPair.forEach { metricPair ->
+            val metricName = "${metricsNamePrefix}${metricPair.metricName.value}"
+            val gaugeBuilder = Gauge.builder(metricName, metricPair.metricValue, { v -> v.toDouble() }).tag("api_name", snakeCasedApiName)
+            customLabels.forEach { (k, v) -> gaugeBuilder.tag(k, v) }
+            gaugeBuilder.register(meterRegistry)
+            LOG.debug("Registered micrometer gauge $metricName for api $snakeCasedApiName")
         }
     }
 
     companion object {
         private val LOG = LoggerFactory.getLogger(ReviewMetrics::class.java)
-        const val NUMBER_OF_ENDPOINTS = "number_of_endpoints_total"
-        const val MUST_VIOLATIONS = "must_violations_total"
-        const val SHOULD_VIOLATIONS = "should_violations_total"
-        const val MAY_VIOLATIONS = "may_violations_total"
-        const val HINT_VIOLATIONS = "hint_violations_total"
     }
 }

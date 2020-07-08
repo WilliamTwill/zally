@@ -10,11 +10,13 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.junit4.SpringRunner
 import org.zalando.zally.core.ApiValidator
 import org.zalando.zally.core.RulesPolicy
+import org.zalando.zally.dto.ApiDefinitionRequest
 import org.zalando.zally.util.readApiDefinition
+import org.zalando.zally.util.resourceToString
 
 @RunWith(SpringRunner::class)
 @SpringBootTest
-@ActiveProfiles("test", "limited-rules")
+@ActiveProfiles("test")
 class ApiReviewRepositoryTest {
 
     @Autowired
@@ -41,5 +43,25 @@ class ApiReviewRepositoryTest {
         val actual = apiReviewRepository.findLatestApiReviews()
 
         assertThat(actual.size).isEqualTo(1)
+    }
+
+    @Test
+    fun shouldPersistCustomLabels() {
+        val givenLabels = mapOf(Pair("custom", "label"))
+        val givenRequest = ApiDefinitionRequest(
+            apiDefinition = resourceToString("fixtures/openapi3_petstore.json"),
+            customLabels = givenLabels
+        )
+        val givenApiReview = ApiReview(
+            givenRequest,
+            apiDefinition = givenRequest.apiDefinition!!,
+            violations = emptyList()
+        )
+        apiReviewRepository.save(givenApiReview)
+
+        val actual = apiReviewRepository.findLatestApiReviews()
+
+        assertThat(actual.size).isEqualTo(1)
+        assertThat(actual[0].customLabels).containsAllEntriesOf(givenLabels)
     }
 }
