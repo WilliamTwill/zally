@@ -2,6 +2,7 @@ package org.zalando.zally.statistic
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Tag
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
@@ -43,11 +44,14 @@ class ReviewMetrics(private val apiReviewRepository: ApiReviewRepository, privat
 
     private fun registerGaugeMetric(reference: StatisticReference, customLabels: Map<String, String>) {
         val snakeCasedApiName = reference.statisticName.replace(Regex("\\p{Zs}+"), "_").toLowerCase()
+        val tags = customLabels.entries.map { Tag.of(it.key, it.value) }.toMutableList()
+        tags.add(Tag.of("api_name", snakeCasedApiName))
         reference.metricPair.forEach { metricPair ->
             val metricName = "${metricsNamePrefix}${metricPair.metricName.value}"
-            val gaugeBuilder = Gauge.builder(metricName, metricPair.metricValue, { v -> v.toDouble() }).tag("api_name", snakeCasedApiName)
-            customLabels.forEach { (k, v) -> gaugeBuilder.tag(k, v) }
-            gaugeBuilder.register(meterRegistry)
+            Gauge
+                .builder(metricName, metricPair.metricValue, { it.toDouble() })
+                .tags(tags)
+                .register(meterRegistry)
             LOG.debug("Registered micrometer gauge $metricName for api $snakeCasedApiName")
         }
     }

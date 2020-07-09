@@ -10,8 +10,19 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
-import java.util.*
-import javax.persistence.*
+import java.util.UUID
+import javax.persistence.Entity
+import javax.persistence.GeneratedValue
+import javax.persistence.GenerationType
+import javax.persistence.Id
+import javax.persistence.Column
+import javax.persistence.ElementCollection
+import javax.persistence.CollectionTable
+import javax.persistence.FetchType
+import javax.persistence.JoinColumn
+import javax.persistence.MapKeyColumn
+import javax.persistence.OneToMany
+import javax.persistence.CascadeType
 
 @Suppress("unused")
 @Entity
