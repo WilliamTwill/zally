@@ -2,7 +2,7 @@ package org.zalando.zally.statistic
 
 import java.util.concurrent.atomic.AtomicLong
 
-data class StatisticReference(val statisticName: String, val metricPair: List<MetricPair>) {
+data class StatisticReference(val statisticName: String, val metricPair: List<MetricPair>, val customLabels: Map<String, String>) {
 
     fun metricValueFor(metricName: MetricName) =
         this.metricPair[this.metricPair.indexOfFirst { p -> p.metricName == metricName }].metricValue
@@ -16,7 +16,8 @@ data class StatisticReference(val statisticName: String, val metricPair: List<Me
                 MetricPair(MetricName.SHOULD_VIOLATIONS, AtomicLong(statistic.shouldViolations)),
                 MetricPair(MetricName.MAY_VIOLATIONS, AtomicLong(statistic.mayViolations)),
                 MetricPair(MetricName.HINT_VIOLATIONS, AtomicLong(statistic.hintViolations))
-            )
+            ),
+            statistic.customLabels
         )
     }
 }

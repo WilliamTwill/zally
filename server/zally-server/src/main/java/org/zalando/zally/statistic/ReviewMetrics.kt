@@ -25,8 +25,10 @@ class ReviewMetrics(private val apiReviewRepository: ApiReviewRepository, privat
             .forEach { statistic ->
                 statisticsReferences
                     .filter { it.statisticName == statistic.name }
+                    .filter { it.customLabels == statistic.customLabels }
                     .map { reference ->
-                        LOG.debug("Updating metrics reference values for review statistic ${statistic.name}")
+                        LOG.debug("Updating metrics reference values for review statistic ${statistic.name} " +
+                            "with labels ${statistic.customLabels}")
                         reference.metricValueFor(MetricName.NUMBER_OF_ENDPOINTS).set(statistic.numberOfEndpoints)
                         reference.metricValueFor(MetricName.MUST_VIOLATIONS).set(statistic.mustViolations)
                         reference.metricValueFor(MetricName.SHOULD_VIOLATIONS).set(statistic.shouldViolations)
@@ -34,17 +36,19 @@ class ReviewMetrics(private val apiReviewRepository: ApiReviewRepository, privat
                         reference.metricValueFor(MetricName.HINT_VIOLATIONS).set(statistic.hintViolations)
                     }
                     .ifEmpty {
-                        LOG.debug("Creating new metrics reference for review statistic ${statistic.name}")
+                        LOG.debug("Creating new metrics reference for review statistic ${statistic.name} " +
+                            "with labels ${statistic.customLabels}")
                         val reference = StatisticReference.of(statistic)
                         statisticsReferences.add(reference)
-                        registerGaugeMetric(reference, statistic.customLabels)
+                        registerGaugeMetric(reference)
                     }
             }
     }
 
-    private fun registerGaugeMetric(reference: StatisticReference, customLabels: Map<String, String>) {
+    private fun registerGaugeMetric(reference: StatisticReference) {
+        // micrometer does not like names with spaces so we replace whitespaces with underscores
         val snakeCasedApiName = reference.statisticName.replace(Regex("\\p{Zs}+"), "_").toLowerCase()
-        val tags = customLabels.entries.map { Tag.of(it.key, it.value) }.toMutableList()
+        val tags = reference.customLabels.entries.map { Tag.of(it.key, it.value) }.toMutableList()
         tags.add(Tag.of("api_name", snakeCasedApiName))
         reference.metricPair.forEach { metricPair ->
             val metricName = "${metricsNamePrefix}${metricPair.metricName.value}"
@@ -52,7 +56,7 @@ class ReviewMetrics(private val apiReviewRepository: ApiReviewRepository, privat
                 .builder(metricName, metricPair.metricValue, { it.toDouble() })
                 .tags(tags)
                 .register(meterRegistry)
-            LOG.debug("Registered micrometer gauge $metricName for api $snakeCasedApiName")
+            LOG.debug("Registered micrometer gauge $metricName for api $snakeCasedApiName with tags $tags")
         }
     }
 

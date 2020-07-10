@@ -11,7 +11,6 @@ import org.springframework.test.context.junit4.SpringRunner
 import org.zalando.zally.core.ApiValidator
 import org.zalando.zally.core.RulesPolicy
 import org.zalando.zally.dto.ApiDefinitionRequest
-import org.zalando.zally.util.readApiDefinition
 import org.zalando.zally.util.resourceToString
 
 @RunWith(SpringRunner::class)
@@ -31,18 +30,77 @@ class ApiReviewRepositoryTest {
     }
 
     @Test
-    fun shouldOnlyReturnOneResultWhenMultipleReviewsExistWithSameName() {
-        val givenRequest = readApiDefinition("fixtures/openapi3_petstore.json")
+    fun shouldReturnResultsWithoutCustomLabels() {
+        val givenRequest = ApiDefinitionRequest(
+            apiDefinition = resourceToString("fixtures/openapi3_petstore.json")
+        )
         val givenApiReview = ApiReview(
             givenRequest,
             apiDefinition = givenRequest.apiDefinition!!,
             violations = rulesValidator.validate(givenRequest.apiDefinition!!, RulesPolicy(listOf()))
         )
-        apiReviewRepository.saveAll(listOf(givenApiReview, givenApiReview))
+
+        apiReviewRepository.save(givenApiReview)
+
+        val actual = apiReviewRepository.findLatestApiReviews()
+        assertThat(actual.size).isEqualTo(1)
+    }
+
+    @Test
+    fun shouldOnlyReturnOneResultWhenMultipleReviewsExistWithSameName() {
+        val givenLabels = mapOf(Pair("custom", "label"))
+        val givenRequest = ApiDefinitionRequest(
+            apiDefinition = resourceToString("fixtures/openapi3_petstore.json"),
+            customLabels = givenLabels
+        )
+
+        val givenApiReview1 = ApiReview(
+            givenRequest,
+            apiDefinition = givenRequest.apiDefinition!!,
+            violations = rulesValidator.validate(givenRequest.apiDefinition!!, RulesPolicy(listOf()))
+        )
+        apiReviewRepository.save(givenApiReview1)
+
+        val givenApiReview2 = ApiReview(
+            givenRequest,
+            apiDefinition = givenRequest.apiDefinition!!,
+            violations = rulesValidator.validate(givenRequest.apiDefinition!!, RulesPolicy(listOf()))
+        )
+        apiReviewRepository.save(givenApiReview2)
 
         val actual = apiReviewRepository.findLatestApiReviews()
 
         assertThat(actual.size).isEqualTo(1)
+    }
+
+    @Test
+    fun shouldReturnResultsWithSameNameButDifferentLabelValues() {
+        val givenRequest = ApiDefinitionRequest(
+            apiDefinition = resourceToString("fixtures/openapi3_petstore.json"),
+            customLabels = mapOf(Pair("custom", "label"))
+        )
+
+        val givenApiReview1 = ApiReview(
+            givenRequest,
+            apiDefinition = givenRequest.apiDefinition!!,
+            violations = rulesValidator.validate(givenRequest.apiDefinition!!, RulesPolicy(listOf()))
+        )
+        apiReviewRepository.save(givenApiReview1)
+
+        val givenRequest2 = ApiDefinitionRequest(
+            apiDefinition = resourceToString("fixtures/openapi3_petstore.json"),
+            customLabels = mapOf(Pair("custom", "otherlabel"))
+        )
+        val givenApiReview2 = ApiReview(
+            givenRequest2,
+            apiDefinition = givenRequest.apiDefinition!!,
+            violations = rulesValidator.validate(givenRequest.apiDefinition!!, RulesPolicy(listOf()))
+        )
+        apiReviewRepository.save(givenApiReview2)
+
+        val actual = apiReviewRepository.findLatestApiReviews()
+
+        assertThat(actual.size).isEqualTo(2)
     }
 
     @Test
